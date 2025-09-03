@@ -4,10 +4,20 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + TS</title>
+    <title>3D 六边形弹球</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+      <div id="controls">
+        <button id="reset-btn">重置小球</button>
+        <button id="audio-btn">🔊 音效开启</button>
+        <div id="info">
+          <p>使用鼠标拖拽旋转视角</p>
+          <p>滚轮缩放</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
