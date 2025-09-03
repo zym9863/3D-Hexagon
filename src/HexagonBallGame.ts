@@ -15,6 +15,7 @@ export class HexagonBallGame {
   private hexagonWalls: THREE.Mesh[] = [];
   private particles: THREE.Points[] = [];
   private audioManager: AudioManager;
+  private ballLight!: THREE.PointLight; // 跟随球的点光源
 
   // 物理参数
   private readonly gravity = -0.0015;
@@ -44,7 +45,20 @@ export class HexagonBallGame {
   private initScene(canvas: HTMLCanvasElement): void {
     // 创建场景
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0a0a);
+    
+    // 创建更丰富的背景
+    const backgroundGeometry = new THREE.SphereGeometry(50, 32, 32);
+    const backgroundMaterial = new THREE.MeshBasicMaterial({
+      color: 0x111122,
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0.8
+    });
+    const backgroundSphere = new THREE.Mesh(backgroundGeometry, backgroundMaterial);
+    this.scene.add(backgroundSphere);
+    
+    // 添加粒子星空背景
+    this.createStarField();
     
     // 创建相机
     this.camera = new THREE.PerspectiveCamera(
@@ -66,9 +80,44 @@ export class HexagonBallGame {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x0a0a0a, 1);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
     
     // 处理窗口大小变化
     window.addEventListener('resize', () => this.onWindowResize());
+  }
+
+  /**
+   * 创建星空背景
+   */
+  private createStarField(): void {
+    const starCount = 200;
+    const starPositions = new Float32Array(starCount * 3);
+    
+    for (let i = 0; i < starCount * 3; i += 3) {
+      // 在球面上随机分布星星
+      const radius = 30 + Math.random() * 20;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      
+      starPositions[i] = radius * Math.sin(phi) * Math.cos(theta);
+      starPositions[i + 1] = radius * Math.cos(phi);
+      starPositions[i + 2] = radius * Math.sin(phi) * Math.sin(theta);
+    }
+    
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    
+    const starMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.1,
+      transparent: true,
+      opacity: 0.8,
+      sizeAttenuation: true
+    });
+    
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    this.scene.add(stars);
   }
 
   /**
@@ -81,13 +130,21 @@ export class HexagonBallGame {
     for (let i = 0; i < 6; i++) {
       const angle = (i * Math.PI) / 3;
       
-      // 墙壁几何体
-      const wallGeometry = new THREE.PlaneGeometry(1.2, this.hexagonHeight * 2);
+      // 增强墙壁几何体，略微增加高度以获得更好的视觉效果
+      const wallGeometry = new THREE.PlaneGeometry(1.2, this.hexagonHeight * 2.2);
+      
+      // 创建更现代的材质，带有渐变效果
+      const hue = i / 6;
+      const color1 = new THREE.Color().setHSL(hue, 0.8, 0.6);
+      
       const wallMaterial = new THREE.MeshPhongMaterial({
-        color: new THREE.Color().setHSL(i / 6, 0.7, 0.6),
+        color: color1,
         transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+        shininess: 60,
+        specular: new THREE.Color(0x222222),
+        reflectivity: 0.3
       });
       
       const wall = new THREE.Mesh(wallGeometry, wallMaterial);
@@ -106,17 +163,33 @@ export class HexagonBallGame {
       this.hexagonGroup.add(wall);
     }
     
-    // 创建底面
+    // 创建更有质感的底面
     const floorGeometry = new THREE.CylinderGeometry(this.hexagonRadius, this.hexagonRadius, 0.1, 6);
     const floorMaterial = new THREE.MeshPhongMaterial({
-      color: 0x333333,
+      color: 0x1a1a3a,
       transparent: true,
-      opacity: 0.9
+      opacity: 0.95,
+      shininess: 100,
+      specular: 0x444444,
+      reflectivity: 0.5
     });
     const floor = new THREE.Mesh(floorGeometry, floorMaterial);
     floor.position.y = -this.hexagonHeight;
     floor.receiveShadow = true;
     this.hexagonGroup.add(floor);
+    
+    // 添加底面发光边缘效果
+    const edgeGeometry = new THREE.RingGeometry(this.hexagonRadius - 0.05, this.hexagonRadius + 0.05, 6);
+    const edgeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x4488ff,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide
+    });
+    const edgeRing = new THREE.Mesh(edgeGeometry, edgeMaterial);
+    edgeRing.position.y = -this.hexagonHeight + 0.051;
+    edgeRing.rotation.x = -Math.PI / 2;
+    this.hexagonGroup.add(edgeRing);
     
     this.scene.add(this.hexagonGroup);
   }
@@ -126,15 +199,30 @@ export class HexagonBallGame {
    */
   private createBall(): void {
     const ballGeometry = new THREE.SphereGeometry(this.ballRadius, 32, 32);
+    
+    // 创建更有质感的球体材质
     const ballMaterial = new THREE.MeshPhongMaterial({
-      color: 0xff4444,
-      shininess: 100,
-      specular: 0x222222
+      color: 0xff2266,
+      shininess: 150,
+      specular: 0xffffff,
+      reflectivity: 0.8,
+      transparent: false
     });
     
     this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
     this.ball.position.set(0, 0.5, 0);
     this.ball.castShadow = true;
+    
+    // 添加球体外围的发光效果
+    const glowGeometry = new THREE.SphereGeometry(this.ballRadius * 1.3, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff4488,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.BackSide
+    });
+    const ballGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+    this.ball.add(ballGlow);
     
     // 初始化球的速度
     this.ballVelocity = new THREE.Vector3(
@@ -150,24 +238,39 @@ export class HexagonBallGame {
    * 设置光照
    */
   private setupLighting(): void {
-    // 环境光
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+    // 增强环境光，提供更好的基础照明
+    const ambientLight = new THREE.AmbientLight(0x404080, 0.6);
     this.scene.add(ambientLight);
     
-    // 主光源
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    // 主光源 - 增强亮度和调整颜色
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
     directionalLight.position.set(5, 10, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
     directionalLight.shadow.mapSize.height = 2048;
     directionalLight.shadow.camera.near = 0.5;
     directionalLight.shadow.camera.far = 50;
+    directionalLight.shadow.bias = -0.0001;
     this.scene.add(directionalLight);
     
-    // 点光源（跟随球移动）
-    const pointLight = new THREE.PointLight(0xff6666, 0.5, 10);
-    pointLight.position.copy(this.ball.position);
-    this.scene.add(pointLight);
+    // 增强的点光源（跟随球移动）
+    this.ballLight = new THREE.PointLight(0xff4488, 0.8, 12);
+    this.ballLight.position.copy(this.ball.position);
+    this.ballLight.castShadow = true;
+    this.scene.add(this.ballLight);
+    
+    // 添加额外的彩色点光源以增强氛围
+    const accentLight1 = new THREE.PointLight(0x4488ff, 0.4, 8);
+    accentLight1.position.set(3, 2, 3);
+    this.scene.add(accentLight1);
+    
+    const accentLight2 = new THREE.PointLight(0x88ff44, 0.4, 8);
+    accentLight2.position.set(-3, 2, -3);
+    this.scene.add(accentLight2);
+    
+    // 添加半球光照以提供更自然的照明
+    const hemisphereLight = new THREE.HemisphereLight(0x4488ff, 0x223344, 0.3);
+    this.scene.add(hemisphereLight);
   }
 
   /**
@@ -288,33 +391,44 @@ export class HexagonBallGame {
    * 创建碰撞粒子效果
    */
   private createCollisionParticles(position: THREE.Vector3): void {
-    const particleCount = 20;
+    const particleCount = 30;
     const positions = new Float32Array(particleCount * 3);
     const velocities = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
 
     for (let i = 0; i < particleCount; i++) {
       const i3 = i * 3;
 
       // 初始位置
-      positions[i3] = position.x;
-      positions[i3 + 1] = position.y;
-      positions[i3 + 2] = position.z;
+      positions[i3] = position.x + (Math.random() - 0.5) * 0.1;
+      positions[i3 + 1] = position.y + (Math.random() - 0.5) * 0.1;
+      positions[i3 + 2] = position.z + (Math.random() - 0.5) * 0.1;
 
       // 随机速度
-      velocities[i3] = (Math.random() - 0.5) * 0.1;
-      velocities[i3 + 1] = Math.random() * 0.05;
-      velocities[i3 + 2] = (Math.random() - 0.5) * 0.1;
+      velocities[i3] = (Math.random() - 0.5) * 0.15;
+      velocities[i3 + 1] = Math.random() * 0.08 + 0.02;
+      velocities[i3 + 2] = (Math.random() - 0.5) * 0.15;
+
+      // 随机颜色（从橙色到红色）
+      const hue = 0.05 + Math.random() * 0.1; // 橙红色范围
+      const color = new THREE.Color().setHSL(hue, 0.9, 0.7);
+      colors[i3] = color.r;
+      colors[i3 + 1] = color.g;
+      colors[i3 + 2] = color.b;
     }
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-      color: 0xff6666,
-      size: 0.02,
+      size: 0.04,
       transparent: true,
-      opacity: 1.0
+      opacity: 1.0,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
     });
 
     const particles = new THREE.Points(geometry, material);
@@ -402,8 +516,14 @@ export class HexagonBallGame {
   private updateHexagonColors(): void {
     this.hexagonWalls.forEach((wall, index) => {
       const material = wall.material as THREE.MeshPhongMaterial;
-      const hue = (index / 6 + this.time * 0.1) % 1;
-      material.color.setHSL(hue, 0.7, 0.6);
+      // 创建更流畅的颜色过渡
+      const hue = (index / 6 + this.time * 0.05) % 1;
+      const saturation = 0.7 + Math.sin(this.time * 2 + index) * 0.2;
+      const lightness = 0.5 + Math.sin(this.time * 3 + index * 2) * 0.2;
+      material.color.setHSL(hue, saturation, lightness);
+      
+      // 动态调整透明度
+      material.opacity = 0.75 + Math.sin(this.time * 1.5 + index) * 0.15;
     });
   }
 
@@ -426,6 +546,10 @@ export class HexagonBallGame {
 
     // 更新粒子
     this.updateParticles();
+
+    // 更新跟随球的光源
+    this.ballLight.position.copy(this.ball.position);
+    this.ballLight.position.y += 0.2; // 略微抬高光源位置
 
     // 渲染场景
     this.renderer.render(this.scene, this.camera);
